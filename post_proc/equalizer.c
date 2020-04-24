@@ -265,8 +265,12 @@ int equalizer_get_parameter(effect_context_t *context, effect_param_t *p,
     case EQ_PARAM_BAND_LEVEL:
 	ALOGV("%s: EQ_PARAM_BAND_LEVEL", __func__);
         param2 = *param_tmp;
-        if (param2 >= NUM_EQ_BANDS) {
+        if (param2 < 0 || param2 >= NUM_EQ_BANDS) {
             p->status = -EINVAL;
+            if (param2 < 0) {
+                android_errorWriteLog(0x534e4554, "32438598");
+                ALOGW("\tERROR EQ_PARAM_BAND_LEVEL band %d", param2);
+            }
             break;
         }
         *(int16_t *)value = (int16_t)equalizer_get_band_level(eq_ctxt, param2);
@@ -275,8 +279,12 @@ int equalizer_get_parameter(effect_context_t *context, effect_param_t *p,
     case EQ_PARAM_CENTER_FREQ:
 	ALOGV("%s: EQ_PARAM_CENTER_FREQ", __func__);
         param2 = *param_tmp;
-        if (param2 >= NUM_EQ_BANDS) {
-           p->status = -EINVAL;
+        if (param2 < 0 || param2 >= NUM_EQ_BANDS) {
+            p->status = -EINVAL;
+            if (param2 < 0) {
+                android_errorWriteLog(0x534e4554, "32436341");
+                ALOGW("\tERROR EQ_PARAM_CENTER_FREQ band %d", param2);
+            }
             break;
         }
         *(int32_t *)value = equalizer_get_center_frequency(eq_ctxt, param2);
@@ -285,8 +293,12 @@ int equalizer_get_parameter(effect_context_t *context, effect_param_t *p,
     case EQ_PARAM_BAND_FREQ_RANGE:
 	ALOGV("%s: EQ_PARAM_BAND_FREQ_RANGE", __func__);
         param2 = *param_tmp;
-        if (param2 >= NUM_EQ_BANDS) {
+        if (param2 < 0 || param2 >= NUM_EQ_BANDS) {
             p->status = -EINVAL;
+            if (param2 < 0) {
+                android_errorWriteLog(0x534e4554, "32247948");
+                ALOGW("\tERROR EQ_PARAM_BAND_FREQ_RANGE band %d", param2);
+            }
            break;
         }
        equalizer_get_band_freq_range(eq_ctxt, param2, (uint32_t *)value,
@@ -313,10 +325,22 @@ int equalizer_get_parameter(effect_context_t *context, effect_param_t *p,
 	ALOGV("%s: EQ_PARAM_GET_PRESET_NAME", __func__);
         param2 = *param_tmp;
 	ALOGV("param2: %d", param2);
-        if (param2 >= equalizer_get_num_presets(eq_ctxt)) {
+        if ((param2 < 0 && param2 != PRESET_CUSTOM) ||
+            param2 >= equalizer_get_num_presets(eq_ctxt)) {
+                p->status = -EINVAL;
+                if (param2 < 0) {
+                    android_errorWriteLog(0x534e4554, "32588016");
+                    ALOGW("\tERROR EQ_PARAM_GET_PRESET_NAME preset %d", param2);
+                }
+                break;
+        }
+
+        if (p->vsize < 1) {
             p->status = -EINVAL;
+            android_errorWriteLog(0x534e4554, "37536407");
             break;
         }
+
         name = (char *)value;
         strlcpy(name, equalizer_get_preset_name(eq_ctxt, param2), p->vsize - 1);
         name[p->vsize - 1] = 0;
@@ -347,6 +371,7 @@ int equalizer_set_parameter(effect_context_t *context, effect_param_t *p,
     equalizer_context_t *eq_ctxt = (equalizer_context_t *)context;
     int voffset = ((p->psize - 1) / sizeof(int32_t) + 1) * sizeof(int32_t);
     void *value = p->data + voffset;
+    int32_t vsize = (int32_t) p->vsize;
     int32_t *param_tmp = (int32_t *)p->data;
     int32_t param = *param_tmp++;
     int32_t preset;
@@ -361,6 +386,10 @@ int equalizer_set_parameter(effect_context_t *context, effect_param_t *p,
     switch (param) {
     case EQ_PARAM_CUR_PRESET:
 	ALOGV("EQ_PARAM_CUR_PRESET");
+        if (vsize < sizeof(int16_t)) {
+           p->status = -EINVAL;
+           break;
+        }
         preset = (int32_t)(*(uint16_t *)value);
 
         if ((preset >= equalizer_get_num_presets(eq_ctxt)) || (preset < 0)) {
@@ -371,16 +400,28 @@ int equalizer_set_parameter(effect_context_t *context, effect_param_t *p,
         break;
     case EQ_PARAM_BAND_LEVEL:
 	ALOGV("EQ_PARAM_BAND_LEVEL");
+        if (vsize < sizeof(int16_t)) {
+            p->status = -EINVAL;
+            break;
+        }
         band =  *param_tmp;
         level = (int32_t)(*(int16_t *)value);
-        if (band >= NUM_EQ_BANDS) {
-           p->status = -EINVAL;
+        if (band < 0 || band >= NUM_EQ_BANDS) {
+            p->status = -EINVAL;
+            if (band < 0) {
+                android_errorWriteLog(0x534e4554, "32585400");
+                ALOGW("\tERROR EQ_PARAM_BAND_LEVEL band %d", band);
+            }
             break;
         }
         equalizer_set_band_level(eq_ctxt, band, level);
         break;
     case EQ_PARAM_PROPERTIES: {
 	ALOGV("EQ_PARAM_PROPERTIES");
+        if (vsize < sizeof(int16_t)) {
+            p->status = -EINVAL;
+            break;
+        }
         int16_t *prop = (int16_t *)value;
         if ((int)prop[0] >= equalizer_get_num_presets(eq_ctxt)) {
             p->status = -EINVAL;
@@ -389,6 +430,13 @@ int equalizer_set_parameter(effect_context_t *context, effect_param_t *p,
         if (prop[0] >= 0) {
             equalizer_set_preset(eq_ctxt, (int)prop[0]);
         } else {
+            if (vsize < (2 + NUM_EQ_BANDS) * sizeof(int16_t)) {
+                android_errorWriteLog(0x534e4554, "37563371");
+                ALOGE("\tERROR EQ_PARAM_PROPERTIES valueSize %d < %d",
+                                  vsize, (2 + NUM_EQ_BANDS) * sizeof(int16_t));
+                p->status = -EINVAL;
+                break;
+            }
             if ((int)prop[1] != NUM_EQ_BANDS) {
                 p->status = -EINVAL;
                 break;
